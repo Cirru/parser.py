@@ -1,5 +1,4 @@
 
-from tail_call import tail_call_optimized
 import tree
 
 def parse(code, filename):
@@ -14,7 +13,11 @@ def parse(code, filename):
     'nest': 0,
     'path': filename
   }
-  res = parsing([], buf, state, code)
+  xs = []
+  while len(code) > 0:
+    result = parsing(xs, buf, state, code)
+    [xs, buf, state, code] = result
+  res = parsing(xs, buf, state, code)
   res = tree.resolveDollar(res)
   res = tree.resolveComma(res)
   return res
@@ -40,7 +43,7 @@ def space_eof(xs, buf, state, code):
   return xs
 
 def token_eof(xs, buf, state, code):
-  buf['es'] = state['x']
+  buf['ex'] = state['x']
   buf['ey'] = state['y']
   xs = tree.appendItem(xs, state['level'], buf)
   buf = None
@@ -58,26 +61,26 @@ def escape_n(xs, buf, state, code):
   state['x'] += 1
   buf['text'] += '\n'
   state['name'] = 'string'
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def escape_t(xs, buf, state, code):
   state['x'] += 1
   buf['text'] += '\t'
   state['name'] = 'string'
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def escape_else(xs, buf, state, code):
   state['x'] += 1
   buf['text'] += code[0]
   state['name'] = 'string'
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 # string
 
 def string_backslash(xs, buf, state, code):
   state['name'] = 'escape'
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def string_newline(xs, buf, state, code):
   raise ValueError('newline in a string')
@@ -85,18 +88,18 @@ def string_newline(xs, buf, state, code):
 def string_quote(xs, buf, state, code):
   state['name'] = 'token'
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def string_else(xs, buf, state, code):
   state['x'] += 1
   buf['text'] += code[0]
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 # space
 
 def space_space(xs, buf, state, code):
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def space_newline(xs, buf, state, code):
   if state['nest'] != 0:
@@ -105,7 +108,7 @@ def space_newline(xs, buf, state, code):
   state['x'] = 1
   state['y'] += 1
   state['indented'] = 0
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def space_open(xs, buf, state, code):
   nesting = tree.createNesting(1)
@@ -113,7 +116,7 @@ def space_open(xs, buf, state, code):
   state['nest'] += 1
   state['level'] += 1
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def space_close(xs, buf, state, code):
   state['nest'] -= 1
@@ -121,7 +124,7 @@ def space_close(xs, buf, state, code):
   if state['nest'] < 0:
     raise ValueError('close at space')
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def space_quote(xs, buf, state, code):
   state['name'] = 'string'
@@ -132,7 +135,7 @@ def space_quote(xs, buf, state, code):
     'path': state['path']
   }
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def space_else(xs, buf, state, code):
   state['name'] = 'token'
@@ -143,7 +146,7 @@ def space_else(xs, buf, state, code):
     'path': state['path']
   }
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 # token
 
@@ -154,7 +157,7 @@ def token_space(xs, buf, state, code):
   xs = tree.appendItem(xs, state['level'], buf)
   state['x'] += 1
   buf = None
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def token_newline(xs, buf, state, code):
   state['name'] = 'indent'
@@ -165,7 +168,7 @@ def token_newline(xs, buf, state, code):
   state['x'] = 1
   state['y'] += 1
   buf = None
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def token_open(xs, buf, state, code):
   raise ValueError('open parenthesis in token')
@@ -176,30 +179,30 @@ def token_close(xs, buf, state, code):
   buf['ey'] = state['y']
   xs = tree.appendItem(xs, state['level'], buf)
   buf = None
-  return parsing(xs, buf, state, code)
+  return (xs, buf, state, code)
 
 def token_quote(xs, buf, state, code):
   state['name'] = 'string'
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def token_else(xs, buf, state, code):
   buf['text'] += code[0]
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 # indent
 
 def indent_space(xs, buf, state, code):
   state['indented'] += 1
   state['x'] += 1
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def indent_newilne(xs, buf, state, code):
   state['x'] = 1
   state['y'] += 1
   state['indented'] = 0
-  return parsing(xs, buf, state, code[1:])
+  return (xs, buf, state, code[1:])
 
 def indent_close(xs, buf, state, code):
   raise ValueError('close parenthesis at indent')
@@ -220,11 +223,10 @@ def indent_else(xs, buf, state, code):
 
   state['level'] += diff
   state['indent'] = indented
-  return parsing(xs, buf, state, code)
+  return (xs, buf, state, code)
 
 # parse
 
-@tail_call_optimized
 def parsing(*args):
   [xs, buf, state, code] = args
   # print('\nparsing:')
